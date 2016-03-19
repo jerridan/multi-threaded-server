@@ -11,21 +11,38 @@
 
 int main(int arg_count, char *arg_val[]) {
 
-   // Check number of arguments
+  // Check number of arguments
   if(4 != arg_count) {
     fprintf(stderr, "Usage: %s port num_threads max_num_connections\n", arg_val[0]);
     exit(EXIT_FAILURE);
   }
 
-  char *port = arg_val[1];
-  // int num_threads = atoi(arg_val[2]);
-  // int max_num_connections = atoi(arg_val[3]);
+  const char *port = arg_val[1];
+  const int num_threads = atoi(arg_val[2]);
+  const int max_num_connections = atoi(arg_val[3]);
 
   // Actions for connection termination handler
   struct sigaction new_action;
   memset(&new_action, 0, sizeof(new_action));
   new_action.sa_handler = &handle_termination;
   sigaction(SIGINT, &new_action, NULL);
+
+  // Allocate space for connections queue
+  connections = calloc(max_num_connections, sizeof(int));
+  num_connections = 0; // # connections currently in queue
+
+  // Initialize queue mutex
+  if(pthread_mutex_init(&queue_mutex, NULL)) {
+    err(EXIT_FAILURE, "%s", "Unable to initialize queue mutex");
+  }
+
+  // Create threads that will handle client requests
+  pthread_t *threads = calloc(num_threads, sizeof(pthread_t));
+  for(int i = 0; i < num_threads; i++) {
+    if(pthread_create(&threads[i], NULL, thread_handle_connection, NULL)) {
+      err(EXIT_FAILURE, "%s", "Error while creating thread");
+    }
+  }
 
   // Get list of available sockets
   struct addrinfo *socket_list = get_server_sockaddr(port);
@@ -38,14 +55,91 @@ int main(int arg_count, char *arg_val[]) {
     err(EXIT_FAILURE, "%s", "Unable to listen on socket");
   }
 
+  int connectionfd; // Incoming connection socket
+
   while(!term_requested) {
-    // Wait for a connection and handle it
-    int connectionfd = wait_for_connection(sockfd);
-    handle_connection(connectionfd);
+    // Wait for a connection from a client
+    connectionfd = wait_for_connection(sockfd);
+    if(-1 == connectionfd) {
+      break;
+    }
+
+    // If queue is full, drop the connection
+    if(max_num_connections == num_connections) {
+      close(connectionfd);
+
+      // Otherwise put the connection in queue
+    } else {
+      if(pthread_mutex_lock(&queue_mutex)) {
+        err(EXIT_FAILURE, "%s", "Unable to lock queue mutex, aborting");
+      }
+
+      connections[num_connections++] = connectionfd;
+      
+      if(pthread_mutex_unlock(&queue_mutex)) {
+        err(EXIT_FAILURE, "%s", "Unable to unlock queue mutex, aborting");
+      }
+    }
   }
 
   close(sockfd);
+  printf("Server shutdown successful\n");
   exit(EXIT_SUCCESS);
+}
+
+// Thread main function for handling connections
+void *thread_handle_connection(void *arg) {
+  char buffer[MAX_MSG_SIZE]; // Receive buffer
+  int bytes_read;
+
+  do {
+    // If there aren't any connections, sleep and recheck every second
+    while(!num_connections && !term_requested) {
+      sleep(1);
+    }
+
+    // Lock out connections queue and grab the first one
+    pthread_mutex_lock(&queue_mutex);
+    int connectionfd = remove_connection_from_queue();
+    pthread_mutex_unlock(&queue_mutex);
+
+    // Read up to 1024 bytes from the client
+    bytes_read = recv(connectionfd, buffer, MAX_MSG_SIZE - 1, 0);
+
+    // If the data was read successfully
+    if(bytes_read > 0) {
+      // Add a terminating NULL character and print the message received
+      buffer[bytes_read] = '\0';
+
+      // Calculate response
+      int multiplicand = atoi(buffer);
+      char *response;
+      asprintf(&response, "%d", multiplicand * MULTIPLIER);
+
+      // Echo the data back to the client; exit loop if we're unable to send
+      if(-1 == send(connectionfd, response, strlen(response), 0)) {
+        warn("Unable to send data to client");
+        break;
+      }
+      free(response);
+    }
+
+    // Close connection
+    close(connectionfd);
+
+  } while(bytes_read > 0 && !term_requested);
+
+  return NULL;
+}
+
+// Removes the first connection from the queue and returns it
+int remove_connection_from_queue() {
+  int connectionfd = connections[0];
+  for(int i = 0; i < num_connections - 1; i++) {
+    connections[i] = connections[i+1];
+  }
+  num_connections--;
+  return connectionfd;
 }
 
 // Gets a list of available sockets for listening on a specified port
@@ -123,7 +217,8 @@ int wait_for_connection(int sockfd) {
 
   // Make sure connection was established
   if(-1 == connectionfd) {
-    err(EXIT_FAILURE, "%s", "Unable to accept connection");
+    fprintf(stderr, "Unable to accept connection\n");
+    return -1;
   }
 
   // Convert the connecting IP to a human readble form and print it
@@ -132,39 +227,6 @@ int wait_for_connection(int sockfd) {
 
   // Return the socket file descriptor for the new connection
   return connectionfd;
-}
-
-// Handles incoming connection
-void handle_connection(int connectionfd) {
-  char buffer[MAX_MSG_SIZE];
-  int bytes_read;
-
-  do {
-    // Read up to 1024 bytes from the client
-    bytes_read = recv(connectionfd, buffer, MAX_MSG_SIZE - 1, 0);
-
-    // If the data was read successfully
-    if(bytes_read > 0) {
-      // Add a terminating NULL character and print the message received
-      buffer[bytes_read] = '\0';
-      // printf("Message received (%d bytes): %s\n", bytes_read, buffer);
-
-      // Calculate response (multiply by 10)
-      int multiplicand = atoi(buffer);
-      char *response;
-      asprintf(&response, "%d", multiplicand * MULTIPLIER);
-
-      // Echo the data back to the client; exit loop if we're unable to send
-      if(-1 == send(connectionfd, response, strlen(response), 0)) {
-        warn("Unable to send data to client");
-        break;
-      }
-      free(response);
-    }
-  } while(bytes_read > 0 && !term_requested);
-
-  // Close connection
-  close(connectionfd);
 }
 
 // Signal handler for Ctrl+C

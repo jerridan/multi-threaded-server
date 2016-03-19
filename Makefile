@@ -1,6 +1,7 @@
-CC      = gcc
-CFLAGS  = -g -O0 -Wall -Werror -std=gnu11
-LDFLAGS = -L.
+CC         = gcc
+CFLAGS     = -g -O0 -Wall -Werror -std=gnu11
+LDFLAGS    = -L.
+SERVERLIBS = -lpthread
 
 .PHONY: all clean
 
@@ -13,7 +14,7 @@ client.o: client.c client.h
 	$(CC) $(CFLAGS) -o $@ -c $<
 
 server: server.o
-	$(CC) -o $@ $^ $(LDFLAGS)
+	$(CC) -o $@ $^ $(LDFLAGS) $(SERVERLIBS)
 
 server.o: server.c server.h
 	$(CC) $(CFLAGS) -o $@ -c $<

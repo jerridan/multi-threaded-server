@@ -11,21 +11,28 @@
 
 #include <arpa/inet.h>
 #include <err.h>
+#include <errno.h>
+#include <netdb.h>
+#include <pthread.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include <sys/socket.h>
-#include <netdb.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <signal.h>
-#include <stdbool.h>
 
 #define BACKLOG 25       // Backlog maximum for queued connections to a socket
 #define MAX_MSG_SIZE 256 // Maximum size of msgs from client
 #define MULTIPLIER 10    // Number to multiply requests by
 
+static int *connections;            // Array of connections threads can handle
+static int num_connections = 0;     // # connections currently in queue
 static bool term_requested = false; // True when SIGINT caught
+
+// Mutexes
+pthread_mutex_t queue_mutex;
 
 int main();
 
@@ -39,8 +46,11 @@ int bind_socket(struct addrinfo* addr_list);
 // Returns a pointer to a connection socket
 int wait_for_connection(int sockfd);
 
-// Handles incoming connection
-void handle_connection(int connectionfd);
+// Thread main function for handling connections
+void *thread_handle_connection(void *arg);
 
 // Signal handler for Ctrl+C
 void handle_termination(int signal);
+
+// Removes the first connection from the queue and returns it
+int remove_connection_from_queue();
