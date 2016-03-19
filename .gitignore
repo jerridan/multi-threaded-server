@@ -1,0 +1,15 @@
+//Unwanted C files
+*.o
+*.a
+*.class
+
+//Executables
+client
+server
+
+//Test data
+examples
+
+//Other
+.DS_Store
+.vagrant
