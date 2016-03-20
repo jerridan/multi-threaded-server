@@ -21,6 +21,17 @@ int main(int arg_count, char *arg_val[]) {
   const int num_threads = atoi(arg_val[2]);
   const int max_num_connections = atoi(arg_val[3]);
 
+  // Check for valid entries
+  if(num_threads < 1) {
+    fprintf(stderr, "The number of threads must be a postive integer\n");
+    exit(EXIT_FAILURE);
+  }
+  
+  if(max_num_connections < 1) {
+    fprintf(stderr, "The number of connections must be a postive integer\n");
+    exit(EXIT_FAILURE);
+  }
+
   // Actions for connection termination handler
   struct sigaction new_action;
   memset(&new_action, 0, sizeof(new_action));
@@ -54,6 +65,9 @@ int main(int arg_count, char *arg_val[]) {
   if(-1 == listen(sockfd, BACKLOG)) {
     err(EXIT_FAILURE, "%s", "Unable to listen on socket");
   }
+
+  // Initialize barrier - for testing only
+  // pthread_barrier_init(&barrier, NULL, num_threads);
 
   int connectionfd; // Incoming connection socket
 
@@ -93,6 +107,9 @@ void *thread_handle_connection(void *arg) {
   int bytes_read;
 
   do {
+
+    // pthread_barrier_wait(&barrier); // Barrier for threads - for testing only
+
     // If there aren't any connections, sleep and recheck every second
     while(!num_connections && !term_requested) {
       sleep(1);
@@ -102,6 +119,10 @@ void *thread_handle_connection(void *arg) {
     pthread_mutex_lock(&queue_mutex);
     int connectionfd = remove_connection_from_queue();
     pthread_mutex_unlock(&queue_mutex);
+
+    if(-1 == connectionfd) {
+      continue;
+    }
 
     // Read up to 1024 bytes from the client
     bytes_read = recv(connectionfd, buffer, MAX_MSG_SIZE - 1, 0);
@@ -134,6 +155,10 @@ void *thread_handle_connection(void *arg) {
 
 // Removes the first connection from the queue and returns it
 int remove_connection_from_queue() {
+  // If there are no more connections (another thread grabbed the last one)
+  if(!num_connections) {
+    return -1;
+  }
   int connectionfd = connections[0];
   for(int i = 0; i < num_connections - 1; i++) {
     connections[i] = connections[i+1];
@@ -232,5 +257,6 @@ int wait_for_connection(int sockfd) {
 // Signal handler for Ctrl+C
 void handle_termination(int signal) {
   printf("\nServer shutdown requested\n");
+  // pthread_barrier_destroy(&barrier); // Remove barrier - for testing only
   term_requested = true;
 }

@@ -30,11 +30,17 @@
 static int *connections;            // Array of connections threads can handle
 static int num_connections = 0;     // # connections currently in queue
 static bool term_requested = false; // True when SIGINT caught
+pthread_mutex_t queue_mutex;        // Connection queue mutex
 
-// Mutexes
-pthread_mutex_t queue_mutex;
+// pthread_barrier_t barrier; // Barrier for testing multi-threading
 
 int main();
+
+// Thread main function for handling connections
+void *thread_handle_connection(void *arg);
+
+// Removes the first connection from the queue and returns it
+int remove_connection_from_queue();
 
 // Gets a list of available sockets for listening on a specified port
 struct addrinfo* get_server_sockaddr(const char* port);
@@ -46,11 +52,5 @@ int bind_socket(struct addrinfo* addr_list);
 // Returns a pointer to a connection socket
 int wait_for_connection(int sockfd);
 
-// Thread main function for handling connections
-void *thread_handle_connection(void *arg);
-
 // Signal handler for Ctrl+C
 void handle_termination(int signal);
-
-// Removes the first connection from the queue and returns it
-int remove_connection_from_queue();
