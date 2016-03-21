@@ -7,6 +7,9 @@
  * Implements a multi-threaded TCP server
 ****************************************************************************/
 
+#ifndef SERVER_H
+#define SERVER_H
+
 #define _GNU_SOURCE
 
 #include <arpa/inet.h>
@@ -54,3 +57,6 @@ int wait_for_connection(int sockfd);
 
 // Signal handler for Ctrl+C
 void handle_termination(int signal);
+
+#endif
+

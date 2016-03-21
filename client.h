@@ -7,6 +7,9 @@
  * Implements a simple client that connects to a server over TCP
 ****************************************************************************/
 
+#ifndef CLIENT_H
+#define CLIENT_H
+
 #include <err.h>
 #include <netdb.h>
 #include <stdio.h>
@@ -27,3 +30,5 @@ struct addrinfo* get_sockaddr(const char* hostname, const char* port);
 // Returns a pointer to a socket connection, given a list of available
 // sockets, or -1 if connection cannot be opened
 int open_connection(struct addrinfo* addr_list);
+
+#endif

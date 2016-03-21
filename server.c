@@ -26,7 +26,7 @@ int main(int arg_count, char *arg_val[]) {
     fprintf(stderr, "The number of threads must be a postive integer\n");
     exit(EXIT_FAILURE);
   }
-  
+
   if(max_num_connections < 1) {
     fprintf(stderr, "The number of connections must be a postive integer\n");
     exit(EXIT_FAILURE);
@@ -108,8 +108,6 @@ void *thread_handle_connection(void *arg) {
 
   do {
 
-    // pthread_barrier_wait(&barrier); // Barrier for threads - for testing only
-
     // If there aren't any connections, sleep and recheck every second
     while(!num_connections && !term_requested) {
       sleep(1);
@@ -123,6 +121,8 @@ void *thread_handle_connection(void *arg) {
     if(-1 == connectionfd) {
       continue;
     }
+
+    // pthread_barrier_wait(&barrier); // Barrier for threads - for testing only
 
     // Read up to 1024 bytes from the client
     bytes_read = recv(connectionfd, buffer, MAX_MSG_SIZE - 1, 0);
